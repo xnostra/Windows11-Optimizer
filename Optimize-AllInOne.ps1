@@ -17,14 +17,7 @@
     Never installs GPU drivers unattended (can break display output).
 #>
 
-# ---- Working directory ----
-# $PSScriptRoot is EMPTY when this script is piped straight into PowerShell
-# (irm <url> | iex), which would put helper files at the drive root. Fall back
-# to a stable per-user folder in that case.
-$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Join-Path $env:LOCALAPPDATA 'Win11Optimize' }
-if (-not (Test-Path $ScriptDir)) { New-Item -ItemType Directory -Path $ScriptDir -Force | Out-Null }
-
-# ---- Self-elevate: relaunch as Administrator if we aren't already ----
+# ---- Who are we running as? (checked early - $ScriptDir and self-elevation both need it) ----
 # IsInRole(Administrator) checks membership in BUILTIN\Administrators, which
 # NT AUTHORITY\SYSTEM is NOT a member of even though it has full rights - so
 # this check alone would misfire under unattended SYSTEM execution (e.g. an
@@ -34,6 +27,22 @@ if (-not (Test-Path $ScriptDir)) { New-Item -ItemType Directory -Path $ScriptDir
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $isAdmin = ([Security.Principal.WindowsPrincipal]$currentIdentity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $isSystemAccount = $currentIdentity.User.Value -eq 'S-1-5-18'
+
+# ---- Working directory ----
+# $PSScriptRoot is EMPTY when this script is piped straight into PowerShell
+# (irm <url> | iex), which would put helper files at the drive root.
+# Under SYSTEM (e.g. Intune), a per-user profile path like %LOCALAPPDATA%
+# isn't readable by the actual signed-in user's own scheduled tasks, so use
+# ProgramData instead - readable by everyone, standard location for exactly
+# this "SYSTEM writes it, a user's task reads it" situation.
+$ScriptDir = if ($PSScriptRoot) {
+    $PSScriptRoot
+} elseif ($isSystemAccount) {
+    Join-Path $env:ProgramData 'Win11Optimize'
+} else {
+    Join-Path $env:LOCALAPPDATA 'Win11Optimize'
+}
+if (-not (Test-Path $ScriptDir)) { New-Item -ItemType Directory -Path $ScriptDir -Force | Out-Null }
 
 if (-not $isAdmin -and -not $isSystemAccount) {
     Write-Host "Not running as Administrator - relaunching with elevation..." -ForegroundColor Yellow
@@ -831,6 +840,135 @@ while ($true) {
             Write-Host "  No games configured - removed the previously scheduled watcher." -ForegroundColor Yellow
         } else {
             Write-Host "  No games configured yet - watcher not scheduled." -ForegroundColor DarkYellow
+        }
+    }
+}
+
+# ============================================================
+# 16 - PER-USER SETTINGS UNDER SYSTEM CONTEXT (Intune, etc.)
+# ============================================================
+# Everything above this point that writes to HKCU actually wrote to SYSTEM's
+# own unused profile when running as SYSTEM - not the signed-in Entra/local
+# user. This section delivers those same ~18 settings correctly by running a
+# small companion script AS the real console user, via a temporary scheduled
+# task. Only runs when: (a) we're SYSTEM and (b) someone is actually signed
+# in - if nobody's logged in there's no user context to deliver this to, and
+# it'll simply be picked up next time the device syncs while someone is.
+if ($isSystemAccount) {
+    Write-Section "Per-user settings (delivering to the signed-in user)"
+
+    $consoleUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
+    if (-not $consoleUser) {
+        Write-Host "  No user currently signed in - per-user settings will apply next sync while" -ForegroundColor DarkYellow
+        Write-Host "  someone is logged in. Machine-wide settings above already applied." -ForegroundColor DarkYellow
+    } else {
+        $targetUserName = ($consoleUser -split '\\')[-1]
+        $userScriptPath = Join-Path $ScriptDir 'Invoke-UserScopeTweaks.ps1'
+
+        @'
+# Per-user settings - runs in the signed-in user's own context so HKCU
+# actually reaches them, not SYSTEM's unused profile.
+function Set-RegistryValue {
+    param($Path, $Name, $Value, $Type = 'DWord')
+    try {
+        if (-not (Test-Path $Path)) { New-Item -Path $Path -Force -ErrorAction Stop | Out-Null }
+        New-ItemProperty -Path $Path -Name $Name -Value $Value -PropertyType $Type -Force -ErrorAction Stop | Out-Null
+    } catch {}
+}
+
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo' 'Enabled' 0
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\Siuf\Rules' 'NumberOfSIUFInPeriod' 0
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\Siuf\Rules' 'PeriodInNanoSeconds' 0
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\SearchSettings' 'IsMSACloudSearchEnabled' 0
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\SearchSettings' 'IsAADCloudSearchEnabled' 0
+
+$cdm = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\ContentDeliveryManager'
+foreach ($n in @('SubscribedContent-338388Enabled','SubscribedContent-338389Enabled',
+                 'SubscribedContent-353694Enabled','SubscribedContent-353696Enabled',
+                 'SilentInstalledAppsEnabled','SystemPaneSuggestionsEnabled',
+                 'PreInstalledAppsEnabled','OemPreInstalledAppsEnabled',
+                 'RotatingLockScreenEnabled','SoftLandingEnabled')) {
+    Set-RegistryValue $cdm $n 0
+}
+
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced' 'TaskbarDa' 0
+Set-RegistryValue 'HKCU:\Software\Policies\Microsoft\Windows\WindowsCopilot' 'TurnOffWindowsCopilot' 1
+
+$bgPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications'
+if (Test-Path $bgPath) {
+    Get-ChildItem $bgPath | ForEach-Object {
+        Set-RegistryValue $_.PSPath 'Disabled' 1
+        Set-RegistryValue $_.PSPath 'DisabledByUser' 1
+    }
+}
+
+$runKey = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Run'
+$approved = 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run'
+$keepKeywords = @('nvidia','amd','radeon','intel','realtek','audio','synaptics','elan',
+    'steam','epic','gog','ubisoft','battle.net','ea desktop','origin','legion','lenovo',
+    'armoury','asus','msi center','g-helper','rgb','icue','synapse','aura','lighting',
+    'fancontrol','fan control','lghub','logitech','razer','corsair','steelseries',
+    'defender','security','windows security')
+if (-not (Test-Path $approved)) { New-Item -Path $approved -Force | Out-Null }
+if (Test-Path $runKey) {
+    foreach ($name in (Get-Item $runKey).Property) {
+        $cmd = (Get-ItemProperty -Path $runKey -Name $name).$name
+        $keep = $false
+        foreach ($kw in $keepKeywords) {
+            if ($name -match [regex]::Escape($kw) -or $cmd -match [regex]::Escape($kw)) { $keep = $true; break }
+        }
+        if (-not $keep) {
+            Set-ItemProperty -Path $approved -Name $name -Value ([byte[]](0x03,0,0,0,0,0,0,0,0,0,0,0)) -Type Binary -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\GameBar' 'AutoGameModeEnabled' 1
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR' 'AppCaptureEnabled' 0
+Set-RegistryValue 'HKCU:\System\GameConfigStore' 'GameDVR_Enabled' 0
+Set-RegistryValue 'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\PushNotifications' 'ToastEnabled' 0
+
+try {
+    $gpuPref = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
+    $gfx     = 'HKCU:\Software\Microsoft\DirectX\GraphicsSettings'
+    if (-not (Test-Path $gpuPref)) { New-Item -Path $gpuPref -Force -ErrorAction Stop | Out-Null }
+    $existing = (Get-ItemProperty -Path $gpuPref -Name 'DirectXUserGlobalSettings' -ErrorAction SilentlyContinue).DirectXUserGlobalSettings
+    $settings = [ordered]@{}
+    if ($existing) {
+        foreach ($pair in $existing.Split(';', [StringSplitOptions]::RemoveEmptyEntries)) {
+            $kv = $pair.Split('=', 2)
+            if ($kv.Count -eq 2) { $settings[$kv[0].Trim()] = $kv[1].Trim() }
+        }
+    }
+    $settings['SwapEffectUpgradeEnable'] = '1'
+    $newVal = (($settings.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ';') + ';'
+    Set-ItemProperty -Path $gpuPref -Name 'DirectXUserGlobalSettings' -Value $newVal -Type String -Force -ErrorAction Stop
+    if (-not (Test-Path $gfx)) { New-Item -Path $gfx -Force -ErrorAction Stop | Out-Null }
+    Set-ItemProperty -Path $gfx -Name 'SwapEffectUpgradeCache' -Value 1 -Type DWord -Force -ErrorAction Stop
+} catch {}
+
+$intl = 'HKCU:\Control Panel\International'
+$desired = @{ sShortDate='dd-MM-yyyy'; sLongDate='dd MMMM yyyy'; sShortTime='h:mm tt'
+              sTimeFormat='h:mm:ss tt'; iTime='0'; iTLZero='0'; iPaperSize='9' }
+foreach ($k in $desired.Keys) { Set-ItemProperty -Path $intl -Name $k -Value $desired[$k] -Force -ErrorAction SilentlyContinue }
+
+"$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')  Per-user tweaks applied for $env:USERNAME" |
+    Add-Content "$PSScriptRoot\user-scope-tweaks.log" -ErrorAction SilentlyContinue
+'@ | Set-Content $userScriptPath -Encoding UTF8
+
+        try {
+            $taskName = "Win11Optimize-UserScope-Temp"
+            $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+                -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$userScriptPath`""
+            $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddSeconds(5)
+            $principal = New-ScheduledTaskPrincipal -UserId $targetUserName -LogonType Interactive -RunLevel Limited
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force -ErrorAction Stop | Out-Null
+            Start-Sleep -Seconds 20
+            Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+            Write-Host "  Delivered to signed-in user: $targetUserName" -ForegroundColor Green
+        } catch {
+            Write-Host "  Could not deliver per-user settings: $($_.Exception.Message)" -ForegroundColor DarkYellow
+            Write-Host "  Machine-wide settings above still applied correctly." -ForegroundColor DarkYellow
         }
     }
 }
