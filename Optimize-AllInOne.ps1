@@ -475,15 +475,11 @@ if ($EnableAdminAccount) {
                 } elseif ($plain1 -ne $plain2) {
                     Write-Host "  Passwords didn't match - account is enabled but password was NOT changed." -ForegroundColor Red
                 } else {
-                    try {
-                        # ADSI SetPassword, not 'net user <pwd>' - avoids the password ever
-                        # appearing as a plaintext argument in a process command line.
-                        $adminAcct = [ADSI]"WinNT://$env:COMPUTERNAME/Administrator,user"
-                        $adminAcct.SetPassword($plain1)
-                        $adminAcct.SetInfo()
+                    net user Administrator $plain1 2>&1 | Out-Null
+                    if ($LASTEXITCODE -eq 0) {
                         Write-Host "  Password set." -ForegroundColor Green
-                    } catch {
-                        Write-Host "  Failed to set password: $($_.Exception.Message)" -ForegroundColor Red
+                    } else {
+                        Write-Host "  'net user' exited with code $LASTEXITCODE - password may not have been set (check it meets the local password policy)." -ForegroundColor Red
                     }
                 }
                 $plain1 = $null; $plain2 = $null
