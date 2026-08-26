@@ -714,9 +714,13 @@ while ($true) {
                 if (-not $nm.Success -or -not $dir.Success) { return }
                 $installDir = Join-Path $sa "common\$($dir.Groups[1].Value)"
                 if (-not (Test-Path $installDir)) { return }
-                $exes = Get-ChildItem $installDir -Filter '*.exe' -File -ErrorAction SilentlyContinue
-                $exes += Get-ChildItem $installDir -Filter '*.exe' -File -Depth 1 -Recurse -ErrorAction SilentlyContinue
-                $exes = $exes | Where-Object { $_.Name -notmatch 'unins|setup|redist|vcredist|directx|crash|helper|updater|prereq' }
+                # @() forces an array even when Get-ChildItem finds exactly one match - without it,
+                # PowerShell returns a bare FileInfo scalar and += fails with "does not contain a
+                # method named 'op_Addition'" (hit on real Steam libraries with single-exe games).
+                # -Recurse -Depth 1 already includes the top-level folder itself, so a separate
+                # non-recursive call would just duplicate those entries - one call covers both.
+                $exes = @(Get-ChildItem $installDir -Filter '*.exe' -File -Depth 1 -Recurse -ErrorAction SilentlyContinue)
+                $exes = @($exes | Where-Object { $_.Name -notmatch 'unins|setup|redist|vcredist|directx|crash|helper|updater|prereq' })
                 if ($exes) {
                     $best = ($exes | Sort-Object Length -Descending | Select-Object -First 1).Name
                     $discovered[[System.IO.Path]::GetFileNameWithoutExtension($best)] = $nm.Groups[1].Value
