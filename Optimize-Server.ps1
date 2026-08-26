@@ -103,7 +103,18 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
     # removal needs an actual try/catch or one blocked package kills the loop.
     function Remove-AppxSafely {
         param([string]$Wildcard)
-        Get-AppxPackage -AllUsers $Wildcard -ErrorAction SilentlyContinue | ForEach-Object {
+        # Get-AppxPackage itself can throw a terminating error that bypasses
+        # -ErrorAction SilentlyContinue (seen in practice: a broken domain trust
+        # relationship makes it fail with a COMException) - same category of
+        # issue as Remove-AppxPackage below, just one call earlier.
+        $packages = $null
+        try {
+            $packages = Get-AppxPackage -AllUsers $Wildcard -ErrorAction Stop
+        } catch {
+            Write-Host "  Could not query packages matching '$Wildcard': $($_.Exception.Message)" -ForegroundColor DarkGray
+            return
+        }
+        $packages | ForEach-Object {
             $pkgName = $_.PackageFullName
             try {
                 $_ | Remove-AppxPackage -AllUsers -ErrorAction Stop
@@ -119,8 +130,12 @@ if (Get-Command Get-AppxPackage -ErrorAction SilentlyContinue) {
     if ($RemoveXbox) {
         Remove-AppxSafely '*Xbox*'
         if (Get-Command Get-AppxProvisionedPackage -ErrorAction SilentlyContinue) {
-            Get-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue | Where-Object { $_.PackageName -like "*Xbox*" } |
-                Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+            try {
+                Get-AppxProvisionedPackage -Online -ErrorAction Stop | Where-Object { $_.PackageName -like "*Xbox*" } |
+                    Remove-AppxProvisionedPackage -Online -ErrorAction SilentlyContinue
+            } catch {
+                Write-Host "  Could not query provisioned Xbox packages: $($_.Exception.Message)" -ForegroundColor DarkGray
+            }
         }
     }
 } else {
