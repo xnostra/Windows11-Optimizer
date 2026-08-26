@@ -52,6 +52,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Join-Path $env:TEMP
 | **Security** | Adds your game libraries to Defender exclusions (never the whole drive) |
 | **Regional** | 12-hour time, `dd-MM-yyyy` dates, A4 paper (locale + physical printers) |
 | **Apps** | Installs Chrome, Microsoft 365, WinRAR via winget — skips anything already present |
+| **Delivery Optimization** | Windows Update peer-to-peer: local-network sharing allowed, internet sharing off |
 | **Ad blocker** | Deploys uBlock Origin per browser (see below) |
 | **Resolution** | Optional per-game auto-switching (see below) |
 

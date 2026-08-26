@@ -82,6 +82,7 @@ $DisableVBS            = $true    # OFF: gains ~3-8% FPS in some games, reduces 
 $AutoDetectDefenderExclusions = $true
 $ExtraDefenderExclusionPaths  = @()
 $SetWindowsUpdateRestartNotify = $true
+$SetDeliveryOptimizationLanOnly = $true  # Windows Update P2P: local-network peering on, internet peering off
 $SetRegionalPreferences = $true   # 12-hour time, dd-MM-yyyy
 $SetPrintersToA4        = $true
 $InstallApps            = $true
@@ -418,6 +419,20 @@ if ($exclusions.Count -eq 0) { Write-Host "  No game folders found." -Foreground
 if ($SetWindowsUpdateRestartNotify) {
     Set-RegistryValue 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings' 'RestartNotificationsAllowed2' 1
     Write-Host "`n  Windows Update: notify before auto-restart."
+}
+if ($SetDeliveryOptimizationLanOnly) {
+    # Delivery Optimization download mode. Value 1 = "Lan" = peer-download from
+    # other PCs on your local network is allowed, but peering over the open
+    # internet is not. This is both requirements at once: internet sharing is
+    # off, and if you're on a network with peers, local downloads happen
+    # automatically - Lan mode falls back to a normal download when no peers
+    # are found, so no separate network-detection logic is needed.
+    # Policy path is authoritative; the Config path keeps Settings UI in sync.
+    Set-RegistryValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' 'DODownloadMode' 1
+    Set-RegistryValue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' 'DODownloadMode' 1
+    Write-Host "  Windows Update delivery: local-network sharing only, internet sharing off."
+    Write-Host "  (Settings > Windows Update > Delivery Optimization will show this as" -ForegroundColor DarkYellow
+    Write-Host "  managed, since it's set by policy rather than the UI toggle.)" -ForegroundColor DarkYellow
 }
 if ($DisableVBS) {
     Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' 'Enabled' 0
