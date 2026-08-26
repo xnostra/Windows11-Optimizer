@@ -18,23 +18,11 @@
 #>
 
 # ---- Who are we running as? (checked early - $ScriptDir and self-elevation both need it) ----
-# IsInRole(Administrator) checks membership in BUILTIN\Administrators, which
-# NT AUTHORITY\SYSTEM is NOT a member of even though it has full rights - so
-# this check alone would misfire under unattended SYSTEM execution (e.g. an
-# Intune Platform Script), attempting a UAC relaunch with no desktop session
-# to show the prompt on. Checking the well-known SYSTEM SID (S-1-5-18)
-# directly avoids that.
 $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
 $isAdmin = ([Security.Principal.WindowsPrincipal]$currentIdentity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $isSystemAccount = $currentIdentity.User.Value -eq 'S-1-5-18'
 
 # ---- Working directory ----
-# $PSScriptRoot is EMPTY when this script is piped straight into PowerShell
-# (irm <url> | iex), which would put helper files at the drive root.
-# Under SYSTEM (e.g. Intune), a per-user profile path like %LOCALAPPDATA%
-# isn't readable by the actual signed-in user's own scheduled tasks, so use
-# ProgramData instead - readable by everyone, standard location for exactly
-# this "SYSTEM writes it, a user's task reads it" situation.
 $ScriptDir = if ($PSScriptRoot) {
     $PSScriptRoot
 } elseif ($isSystemAccount) {
@@ -46,7 +34,6 @@ if (-not (Test-Path $ScriptDir)) { New-Item -ItemType Directory -Path $ScriptDir
 
 if (-not $isAdmin -and -not $isSystemAccount) {
     Write-Host "Not running as Administrator - relaunching with elevation..." -ForegroundColor Yellow
-    # When piped from the web there is no file to relaunch, so write ourselves out first.
     $selfPath = $PSCommandPath
     if (-not $selfPath) {
         $selfPath = Join-Path $ScriptDir 'Optimize-AllInOne.ps1'
@@ -73,40 +60,38 @@ if (-not $isAdmin -and -not $isSystemAccount) {
 # ============================================================
 # CONFIG
 # ============================================================
-$RemoveXbox            = $false   # $true only if you DON'T use Game Pass
-$RemoveMixedReality    = $true
-$RemoveBingWeather     = $true
-$RemoveSpotify         = $true
-$RemoveZune            = $true
-$RemoveWidgets         = $true
-$RemoveCopilot         = $true
-$RemoveOemBloatware    = $true
-$DisableTelemetry      = $true
-$DisableAdvertisingId  = $true
-$DisableWebSearch      = $true
-$TuneDiagnosticsFeedback = $true
-$ClearDiagnosticDataNow  = $true
-$DisableBackgroundApps = $true
-$TuneStartupApps       = $true
-$TuneServices          = $true
-$SetBalancedPowerPlan  = $true
-$DisablePcieLSPM       = $true    # auto-disabled on battery devices below
-$GamingTweaks          = $true
-$DisableNotificationsToasts = $true
-$DisableVBS            = $true    # OFF: gains ~3-8% FPS in some games, reduces exploit protection. Set $false to keep Memory Integrity on.
+$RemoveXbox                     = $false   # $true only if you DON'T use Game Pass
+$RemoveMixedReality            = $true
+$RemoveBingWeather             = $true
+$RemoveSpotify                 = $true
+$RemoveZune                    = $true
+$RemoveWidgets                 = $true
+$RemoveCopilot                 = $true
+$RemoveOemBloatware            = $true
+$DisableTelemetry              = $true
+$DisableAdvertisingId          = $true
+$DisableWebSearch              = $true
+$TuneDiagnosticsFeedback       = $true
+$ClearDiagnosticDataNow        = $true
+$DisableBackgroundApps         = $true
+$TuneStartupApps               = $true
+$TuneServices                  = $true
+$SetBalancedPowerPlan          = $true
+$DisablePcieLSPM               = $true    # auto-disabled on battery devices below
+$GamingTweaks                  = $true
+$DisableNotificationsToasts    = $true
+$DisableVBS                    = $true    # OFF: gains ~3-8% FPS in some games, reduces exploit protection. Set $false to keep Memory Integrity on.
 $AutoDetectDefenderExclusions = $true
 $ExtraDefenderExclusionPaths  = @()
 $SetWindowsUpdateRestartNotify = $true
 $SetDeliveryOptimizationLanOnly = $true  # Windows Update P2P: local-network peering on, internet peering off
-$EnableAdminAccount = $false  # OFF by default: enables built-in Administrator, then INTERACTIVELY
-                               # prompts you to type its password right here at runtime. Nothing is
-                               # ever hardcoded - only works when run manually (a prompt has no one to
-                               # answer it under unattended/SYSTEM execution, so it's skipped there).
-$SetRegionalPreferences = $true   # 12-hour time, dd-MM-yyyy
-$SetPrintersToA4        = $true
-$InstallApps            = $true
-$DeployAdBlocker        = $true
-$SetupResolutionWatcher = $true   # writes watcher files + scheduled task
+$EnableAdminAccount            = $true   # Set to $true to automatically enable the built-in Administrator account
+$AdminPassword                 = "YourSecurePassword123!" # Must meet Windows complexity requirements
+$SetRegionalPreferences        = $true   # 12-hour time, dd-MM-yyyy
+$SetPrintersToA4                = $true
+$InstallApps                    = $true
+$DeployAdBlocker                = $true
+$SetupResolutionWatcher        = $true   # writes watcher files + scheduled task
 
 $AppsToInstall = @(
     @{ Id = 'Google.Chrome';    Name = 'Google Chrome' },
@@ -182,7 +167,6 @@ foreach ($gpu in $gpus) {
     if ($vendorPage) { Write-Host "    Updates: $vendorPage" -ForegroundColor Yellow }
 }
 
-# Companion app: check installed, open a SEARCH tab if missing (never downloads)
 function Test-AppInstalled {
     param([string[]]$NamePatterns)
     foreach ($p in $NamePatterns) { if (Get-AppxPackage -Name "*$p*" -ErrorAction SilentlyContinue) { return $true } }
@@ -218,7 +202,6 @@ if ($companionApp) {
     }
 }
 
-# ---- Device-aware overrides ----
 $isBatteryDevice = $false
 if ($deviceCategory -match 'Laptop|Handheld|Tablet|Convertible') { $isBatteryDevice = $true }
 elseif (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue) { $isBatteryDevice = $true }
@@ -391,8 +374,6 @@ if ($GamingTweaks) {
     Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers' 'HwSchMode' 2
     Write-Host "  Game Mode on, Game Bar off, HAGS on."
 
-    # Optimizations for windowed games - DirectXUserGlobalSettings is a semicolon
-    # string that also holds AutoHDR, so parse and merge rather than overwrite.
     try {
         $gpuPref = 'HKCU:\Software\Microsoft\DirectX\UserGpuPreferences'
         $gfx     = 'HKCU:\Software\Microsoft\DirectX\GraphicsSettings'
@@ -440,13 +421,6 @@ if ($SetWindowsUpdateRestartNotify) {
     Write-Host "`n  Windows Update: notify before auto-restart."
 }
 if ($SetDeliveryOptimizationLanOnly) {
-    # Delivery Optimization download mode. Value 1 = "Lan" = peer-download from
-    # other PCs on your local network is allowed, but peering over the open
-    # internet is not. This is both requirements at once: internet sharing is
-    # off, and if you're on a network with peers, local downloads happen
-    # automatically - Lan mode falls back to a normal download when no peers
-    # are found, so no separate network-detection logic is needed.
-    # Policy path is authoritative; the Config path keeps Settings UI in sync.
     Set-RegistryValue 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization' 'DODownloadMode' 1
     Set-RegistryValue 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config' 'DODownloadMode' 1
     Write-Host "  Windows Update delivery: local-network sharing only, internet sharing off."
@@ -455,38 +429,19 @@ if ($SetDeliveryOptimizationLanOnly) {
 }
 if ($EnableAdminAccount) {
     Write-Section "Built-in Administrator account"
-    if ($isSystemAccount -or -not [Environment]::UserInteractive) {
-        Write-Host "  Skipped - this needs someone to type a password interactively, which isn't" -ForegroundColor DarkYellow
-        Write-Host "  possible under unattended/SYSTEM execution. Run this manually to use it." -ForegroundColor DarkYellow
-    } else {
-        try {
-            net user Administrator /active:yes 2>&1 | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "  'net user' exited with code $LASTEXITCODE - account may not be enabled." -ForegroundColor DarkYellow
-            } else {
-                Write-Host "  Account enabled." -ForegroundColor Green
-                $securePwd1 = Read-Host "  Enter a password for the Administrator account" -AsSecureString
-                $securePwd2 = Read-Host "  Confirm password" -AsSecureString
-                $plain1 = [System.Net.NetworkCredential]::new('', $securePwd1).Password
-                $plain2 = [System.Net.NetworkCredential]::new('', $securePwd2).Password
+    try {
+        # Enable the account
+        net user Administrator /active:yes 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "net user /active:yes failed with exit code $LASTEXITCODE" }
 
-                if ([string]::IsNullOrWhiteSpace($plain1)) {
-                    Write-Host "  Empty password - account is enabled but password was NOT changed." -ForegroundColor Red
-                } elseif ($plain1 -ne $plain2) {
-                    Write-Host "  Passwords didn't match - account is enabled but password was NOT changed." -ForegroundColor Red
-                } else {
-                    net user Administrator $plain1 2>&1 | Out-Null
-                    if ($LASTEXITCODE -eq 0) {
-                        Write-Host "  Password set." -ForegroundColor Green
-                    } else {
-                        Write-Host "  'net user' exited with code $LASTEXITCODE - password may not have been set (check it meets the local password policy)." -ForegroundColor Red
-                    }
-                }
-                $plain1 = $null; $plain2 = $null
-            }
-        } catch {
-            Write-Host "  Failed to enable: $($_.Exception.Message)" -ForegroundColor DarkYellow
-        }
+        # Set the password
+        net user Administrator $AdminPassword 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "net user password assignment failed with exit code $LASTEXITCODE" }
+
+        Write-Host "  Built-in Administrator account enabled and password configured." -ForegroundColor Green
+    }
+    catch {
+        Write-Host "  Failed to configure built-in Administrator account: $_" -ForegroundColor Red
     }
 }
 if ($DisableVBS) {
@@ -524,8 +479,6 @@ if ($SetPrintersToA4) {
         Write-Host "  Locale paper -> A4"
     } else { Write-Host "  Locale paper: already A4" -ForegroundColor DarkGray }
 
-    # Some virtual printer drivers CRASH the spooler on Set-PrintConfiguration.
-    # Skip them by name and health-check the spooler after every change.
     $skipDrivers = @('OneNote','Virtual Print Class','Fax')
     if ((Get-Service Spooler -ErrorAction SilentlyContinue).Status -ne 'Running') {
         Start-Service Spooler -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2
@@ -575,16 +528,6 @@ if ($InstallApps) {
 if ($DeployAdBlocker) {
     Write-Section "Ad blocker (per-browser: full uBlock Origin where supported, Lite where not)"
 
-    # Manifest V2 status as of Aug 2026 decides WHICH uBlock each browser gets:
-    #   Chrome  - MV2 fully removed (Chrome 151 stripped the last flags) -> uBO Lite
-    #   Edge    - MV2 phase-out began Aug 2026                           -> uBO Lite
-    #   Vivaldi - Chromium-based, same MV2 removal                       -> uBO Lite
-    #   Firefox - supports MV2 indefinitely                              -> FULL uBO
-    #   Brave   - supports FULL uBO, but self-hosts MV2 extensions and its
-    #             ExtensionInstallForcelist is known-unreliable, so it is NOT
-    #             force-installed here (see the note printed below).
-    # Extension IDs differ per store - a Chrome Web Store ID will not install
-    # from the Edge Add-ons store, which is why each entry carries its own URL.
     $CWS  = 'https://clients2.google.com/service/update2/crx'
     $EDGE = 'https://edge.microsoft.com/extensionwebstorebase/v1/crx'
 
@@ -623,7 +566,6 @@ if ($DeployAdBlocker) {
         } catch { Write-Host "  $($b.Name) : policy failed - $($_.Exception.Message)" -ForegroundColor DarkYellow }
     }
 
-    # ---- Firefox: different mechanism entirely (ExtensionSettings, not a forcelist) ----
     $ffExe = @("$env:ProgramFiles\Mozilla Firefox\firefox.exe","${env:ProgramFiles(x86)}\Mozilla Firefox\firefox.exe") |
         Where-Object { Test-Path $_ } | Select-Object -First 1
     if ($ffExe) {
@@ -639,7 +581,6 @@ if ($DeployAdBlocker) {
         Write-Host "  Firefox : not installed - skipped" -ForegroundColor DarkGray
     }
 
-    # ---- Brave: detected but deliberately not automated ----
     $braveExe = @("$env:ProgramFiles\BraveSoftware\Brave-Browser\Application\brave.exe",
                   "${env:ProgramFiles(x86)}\BraveSoftware\Brave-Browser\Application\brave.exe",
                   "$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe") |
@@ -673,11 +614,6 @@ if ($SetupResolutionWatcher) {
         '{ "Games": { } }' | Set-Content $cfgPath
         Write-Host "  Created game-resolutions.json"
     } else {
-        # Strip shipped example/placeholder entries. Left in place they count as
-        # real games, which schedules the watcher for nothing - and worse, would
-        # actually change resolution if a game matching a placeholder name ran.
-        # Identified by their Note text, so a genuinely discovered game with the
-        # same name is never removed.
         try {
             $existingCfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
             $stripped = 0
@@ -695,7 +631,6 @@ if ($SetupResolutionWatcher) {
         } catch { Write-Host "  Could not read existing game-resolutions.json - leaving as-is." -ForegroundColor DarkYellow }
     }
 
-    # Write the watcher script out so a scheduled task can point at it.
     @'
 param([string]$ConfigPath = "$PSScriptRoot\game-resolutions.json")
 $code = @"
@@ -763,7 +698,6 @@ while ($true) {
 }
 '@ | Set-Content $watcherPath
 
-    # Auto-discover installed games (Steam / GOG / Epic) into the config
     $discovered = @{}
     $steamPath = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
     if ($steamPath) { $steamPath = $steamPath -replace '/','\' } else { $steamPath = "${env:ProgramFiles(x86)}\Steam" }
@@ -784,11 +718,6 @@ while ($true) {
                 if (-not $nm.Success -or -not $dir.Success) { return }
                 $installDir = Join-Path $sa "common\$($dir.Groups[1].Value)"
                 if (-not (Test-Path $installDir)) { return }
-                # @() forces an array even when Get-ChildItem finds exactly one match - without it,
-                # PowerShell returns a bare FileInfo scalar and += fails with "does not contain a
-                # method named 'op_Addition'" (hit on real Steam libraries with single-exe games).
-                # -Recurse -Depth 1 already includes the top-level folder itself, so a separate
-                # non-recursive call would just duplicate those entries - one call covers both.
                 $exes = @(Get-ChildItem $installDir -Filter '*.exe' -File -Depth 1 -Recurse -ErrorAction SilentlyContinue)
                 $exes = @($exes | Where-Object { $_.Name -notmatch 'unins|setup|redist|vcredist|directx|crash|helper|updater|prereq' })
                 if ($exes) {
@@ -841,13 +770,8 @@ while ($true) {
         Write-Host "  No Steam/GOG/Epic games found to auto-discover." -ForegroundColor DarkYellow
     }
 
-    # Register the watcher only if there's something to watch
     $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
     if ($cfg.Games.PSObject.Properties.Name.Count -gt 0) {
-        # $env:USERNAME is "SYSTEM" under unattended SYSTEM execution (e.g. an
-        # Intune Platform Script), which would register the task for a
-        # nonexistent interactive "SYSTEM" logon and it would never fire. Fall
-        # back to whoever is actually logged into the console in that case.
         $targetUser = $env:USERNAME
         if ($targetUser -eq 'SYSTEM') {
             $consoleUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
@@ -872,8 +796,6 @@ while ($true) {
             Write-Host "  Games default to native res; edit game-resolutions.json to lower any." -ForegroundColor Yellow
         }
     } else {
-        # Actively remove a previously-registered task, so a stale watcher isn't
-        # left polling every 3 seconds for games that are no longer configured.
         if (Get-ScheduledTask -TaskName "GameResolutionWatcher" -ErrorAction SilentlyContinue) {
             Stop-ScheduledTask -TaskName "GameResolutionWatcher" -ErrorAction SilentlyContinue
             Unregister-ScheduledTask -TaskName "GameResolutionWatcher" -Confirm:$false -ErrorAction SilentlyContinue
@@ -887,13 +809,6 @@ while ($true) {
 # ============================================================
 # 16 - PER-USER SETTINGS UNDER SYSTEM CONTEXT (Intune, etc.)
 # ============================================================
-# Everything above this point that writes to HKCU actually wrote to SYSTEM's
-# own unused profile when running as SYSTEM - not the signed-in Entra/local
-# user. This section delivers those same ~18 settings correctly by running a
-# small companion script AS the real console user, via a temporary scheduled
-# task. Only runs when: (a) we're SYSTEM and (b) someone is actually signed
-# in - if nobody's logged in there's no user context to deliver this to, and
-# it'll simply be picked up next time the device syncs while someone is.
 if ($isSystemAccount) {
     Write-Section "Per-user settings (delivering to the signed-in user)"
 
@@ -906,8 +821,6 @@ if ($isSystemAccount) {
         $userScriptPath = Join-Path $ScriptDir 'Invoke-UserScopeTweaks.ps1'
 
         @'
-# Per-user settings - runs in the signed-in user's own context so HKCU
-# actually reaches them, not SYSTEM's unused profile.
 function Set-RegistryValue {
     param($Path, $Name, $Value, $Type = 'DWord')
     try {
