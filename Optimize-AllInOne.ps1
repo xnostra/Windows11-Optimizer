@@ -25,11 +25,17 @@ $ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Join-Path $env:LOCALAPP
 if (-not (Test-Path $ScriptDir)) { New-Item -ItemType Directory -Path $ScriptDir -Force | Out-Null }
 
 # ---- Self-elevate: relaunch as Administrator if we aren't already ----
-$isAdmin = ([Security.Principal.WindowsPrincipal] `
-    [Security.Principal.WindowsIdentity]::GetCurrent()
-).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+# IsInRole(Administrator) checks membership in BUILTIN\Administrators, which
+# NT AUTHORITY\SYSTEM is NOT a member of even though it has full rights - so
+# this check alone would misfire under unattended SYSTEM execution (e.g. an
+# Intune Platform Script), attempting a UAC relaunch with no desktop session
+# to show the prompt on. Checking the well-known SYSTEM SID (S-1-5-18)
+# directly avoids that.
+$currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$isAdmin = ([Security.Principal.WindowsPrincipal]$currentIdentity).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+$isSystemAccount = $currentIdentity.User.Value -eq 'S-1-5-18'
 
-if (-not $isAdmin) {
+if (-not $isAdmin -and -not $isSystemAccount) {
     Write-Host "Not running as Administrator - relaunching with elevation..." -ForegroundColor Yellow
     # When piped from the web there is no file to relaunch, so write ourselves out first.
     $selfPath = $PSCommandPath
@@ -789,15 +795,33 @@ while ($true) {
     # Register the watcher only if there's something to watch
     $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json
     if ($cfg.Games.PSObject.Properties.Name.Count -gt 0) {
-        $action = New-ScheduledTaskAction -Execute "powershell.exe" `
-            -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watcherPath`""
-        $trigger = New-ScheduledTaskTrigger -AtLogOn
-        $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
-        $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
-        Register-ScheduledTask -TaskName "GameResolutionWatcher" -Action $action -Trigger $trigger `
-            -Settings $settings -Principal $principal -Force | Out-Null
-        Write-Host "  Watcher scheduled - starts at every login." -ForegroundColor Green
-        Write-Host "  Games default to native res; edit game-resolutions.json to lower any." -ForegroundColor Yellow
+        # $env:USERNAME is "SYSTEM" under unattended SYSTEM execution (e.g. an
+        # Intune Platform Script), which would register the task for a
+        # nonexistent interactive "SYSTEM" logon and it would never fire. Fall
+        # back to whoever is actually logged into the console in that case.
+        $targetUser = $env:USERNAME
+        if ($targetUser -eq 'SYSTEM') {
+            $consoleUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction SilentlyContinue).UserName
+            if ($consoleUser) {
+                $targetUser = ($consoleUser -split '\\')[-1]
+            } else {
+                Write-Host "  Running as SYSTEM with no logged-in user detected - skipping the" -ForegroundColor DarkYellow
+                Write-Host "  resolution watcher (it needs a real user session to run under)." -ForegroundColor DarkYellow
+                $targetUser = $null
+            }
+        }
+
+        if ($targetUser) {
+            $action = New-ScheduledTaskAction -Execute "powershell.exe" `
+                -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watcherPath`""
+            $trigger = New-ScheduledTaskTrigger -AtLogOn
+            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero)
+            $principal = New-ScheduledTaskPrincipal -UserId $targetUser -LogonType Interactive -RunLevel Limited
+            Register-ScheduledTask -TaskName "GameResolutionWatcher" -Action $action -Trigger $trigger `
+                -Settings $settings -Principal $principal -Force | Out-Null
+            Write-Host "  Watcher scheduled - starts at every login." -ForegroundColor Green
+            Write-Host "  Games default to native res; edit game-resolutions.json to lower any." -ForegroundColor Yellow
+        }
     } else {
         # Actively remove a previously-registered task, so a stale watcher isn't
         # left polling every 3 seconds for games that are no longer configured.
