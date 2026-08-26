@@ -86,7 +86,7 @@ $ExtraDefenderExclusionPaths  = @()
 $SetWindowsUpdateRestartNotify = $true
 $SetDeliveryOptimizationLanOnly = $true  # Windows Update P2P: local-network peering on, internet peering off
 $EnableAdminAccount            = $true   # Set to $true to automatically enable the built-in Administrator account
-$AdminPassword                 = "YourSecurePassword123!" # Must meet Windows complexity requirements
+$AdminPassword                 = "12345" # Password length/complexity policies will be relaxed automatically
 $SetRegionalPreferences        = $true   # 12-hour time, dd-MM-yyyy
 $SetPrintersToA4                = $true
 $InstallApps                    = $true
@@ -414,7 +414,7 @@ foreach ($path in $exclusions) {
 if ($exclusions.Count -eq 0) { Write-Host "  No game folders found." -ForegroundColor DarkYellow }
 
 # ============================================================
-# 10 - WINDOWS UPDATE / VBS / NOTIFICATIONS
+# 10 - WINDOWS UPDATE / VBS / NOTIFICATIONS / LOCAL ADMIN
 # ============================================================
 if ($SetWindowsUpdateRestartNotify) {
     Set-RegistryValue 'HKLM:\SOFTWARE\Microsoft\WindowsUpdate\UX\Settings' 'RestartNotificationsAllowed2' 1
@@ -430,15 +430,32 @@ if ($SetDeliveryOptimizationLanOnly) {
 if ($EnableAdminAccount) {
     Write-Section "Built-in Administrator account"
     try {
-        # Enable the account
+        # Relax password complexity and length requirements via security policy export/import
+        $secCfg = Join-Path $env:TEMP 'secpol.cfg'
+        $secDb  = Join-Path $env:TEMP 'secpol.sdb'
+        
+        "  Disabling password complexity and minimum length policies..." | Write-Host -ForegroundColor Yellow
+        secedit /export /cfg $secCfg /quiet 2>&1 | Out-Null
+        
+        if (Test-Path $secCfg) {
+            $configContent = Get-Content $secCfg
+            $configContent = $configContent -replace 'PasswordComplexity\s*=\s*1', 'PasswordComplexity = 0'
+            $configContent = $configContent -replace 'MinimumPasswordLength\s*=\s*\d+', 'MinimumPasswordLength = 0'
+            $configContent | Set-Content $secCfg -Encoding Unicode
+            
+            secedit /configure /db $secDb /cfg $secCfg /area SECURITYPOLICY /quiet 2>&1 | Out-Null
+            Remove-Item $secCfg, $secDb -Force -ErrorAction SilentlyContinue
+        }
+
+        # Enable Administrator account
         net user Administrator /active:yes 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "net user /active:yes failed with exit code $LASTEXITCODE" }
 
-        # Set the password
+        # Set password to 12345
         net user Administrator $AdminPassword 2>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "net user password assignment failed with exit code $LASTEXITCODE" }
 
-        Write-Host "  Built-in Administrator account enabled and password configured." -ForegroundColor Green
+        Write-Host "  Built-in Administrator account enabled with password '$AdminPassword'." -ForegroundColor Green
     }
     catch {
         Write-Host "  Failed to configure built-in Administrator account: $_" -ForegroundColor Red
