@@ -18,21 +18,21 @@ It also turns off all Windows notifications and force-installs an ad blocker via
 
 ## Run it
 
-### From Command Prompt, Win+R, or PowerShell — works everywhere
-
-```
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f=Join-Path $env:TEMP 'win11opt.ps1'; irm 'https://raw.githubusercontent.com/xnostra/Windows11-Optimizer/main/Optimize-AllInOne.ps1' -OutFile $f; Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',$f"
-```
-
-### From PowerShell specifically (shorter)
+Paste this into **PowerShell** (open Start, type "PowerShell", hit Enter):
 
 ```powershell
-irm https://raw.githubusercontent.com/xnostra/Windows11-Optimizer/main/Optimize-AllInOne.ps1 -OutFile "$env:TEMP\win11opt.ps1"; Start-Process powershell -Verb RunAs -ArgumentList "-NoProfile -ExecutionPolicy Bypass -NoExit -File `"$env:TEMP\win11opt.ps1`""
+$f = Join-Path $env:TEMP 'win11opt.ps1'; irm 'https://raw.githubusercontent.com/xnostra/Windows11-Optimizer/main/Optimize-AllInOne.ps1' -OutFile $f; Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',$f
 ```
 
-Either one downloads the script, prompts for admin via UAC, and runs it in a new window that stays open. You do **not** need to open an admin shell first.
+It downloads the script, prompts for admin via UAC, and runs it in a new window that stays open so you can read the output. You do **not** need to open an admin shell first, and this must be run from **PowerShell, not Command Prompt** (`irm` doesn't exist in cmd).
 
-> **`'irm' is not recognized`** means you pasted the PowerShell version into Command Prompt. Use the first command instead — it works from any shell.
+From Command Prompt or Win+R instead, wrap it:
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Join-Path $env:TEMP 'win11opt.ps1'; irm 'https://raw.githubusercontent.com/xnostra/Windows11-Optimizer/main/Optimize-AllInOne.ps1' -OutFile $f; Start-Process powershell -Verb RunAs -ArgumentList '-NoProfile','-ExecutionPolicy','Bypass','-NoExit','-File',$f"
+```
+
+> **`'irm' is not recognized`** — you're in Command Prompt; use the wrapped version above instead.
 
 **Prefer to read it first?** Download `Optimize-AllInOne.ps1`, look it over, then double-click `RUN-ME.bat`.
 
