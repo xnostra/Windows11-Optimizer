@@ -98,9 +98,10 @@ $AutoDetectDefenderExclusions = $true
 $ExtraDefenderExclusionPaths  = @()
 $SetWindowsUpdateRestartNotify = $true
 $SetDeliveryOptimizationLanOnly = $true  # Windows Update P2P: local-network peering on, internet peering off
-$EnableAdminForLaps = $false  # OFF by default: enables built-in Administrator, NO password set here -
-                               # pair with a Windows LAPS policy in Intune to actually manage/rotate the
-                               # password. Never set a static password here or anywhere - see README.
+$EnableAdminAccount = $false  # OFF by default: enables built-in Administrator, then INTERACTIVELY
+                               # prompts you to type its password right here at runtime. Nothing is
+                               # ever hardcoded - only works when run manually (a prompt has no one to
+                               # answer it under unattended/SYSTEM execution, so it's skipped there).
 $SetRegionalPreferences = $true   # 12-hour time, dd-MM-yyyy
 $SetPrintersToA4        = $true
 $InstallApps            = $true
@@ -452,21 +453,44 @@ if ($SetDeliveryOptimizationLanOnly) {
     Write-Host "  (Settings > Windows Update > Delivery Optimization will show this as" -ForegroundColor DarkYellow
     Write-Host "  managed, since it's set by policy rather than the UI toggle.)" -ForegroundColor DarkYellow
 }
-if ($EnableAdminForLaps) {
-    Write-Section "Built-in Administrator account (for Windows LAPS - no password set here)"
-    try {
-        net user Administrator /active:yes 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  Enabled. NO password was set by this script." -ForegroundColor Green
-            Write-Host "  This account is now usable but UNMANAGED until a Windows LAPS policy" -ForegroundColor Yellow
-            Write-Host "  targets it - configure one in Intune now: Endpoint security > Account" -ForegroundColor Yellow
-            Write-Host "  protection > Windows LAPS. Until that policy applies, don't rely on this" -ForegroundColor Yellow
-            Write-Host "  account for access - it has no controlled credential yet." -ForegroundColor Yellow
-        } else {
-            Write-Host "  'net user' exited with code $LASTEXITCODE - account may not be enabled." -ForegroundColor DarkYellow
+if ($EnableAdminAccount) {
+    Write-Section "Built-in Administrator account"
+    if ($isSystemAccount -or -not [Environment]::UserInteractive) {
+        Write-Host "  Skipped - this needs someone to type a password interactively, which isn't" -ForegroundColor DarkYellow
+        Write-Host "  possible under unattended/SYSTEM execution. Run this manually to use it." -ForegroundColor DarkYellow
+    } else {
+        try {
+            net user Administrator /active:yes 2>&1 | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "  'net user' exited with code $LASTEXITCODE - account may not be enabled." -ForegroundColor DarkYellow
+            } else {
+                Write-Host "  Account enabled." -ForegroundColor Green
+                $securePwd1 = Read-Host "  Enter a password for the Administrator account" -AsSecureString
+                $securePwd2 = Read-Host "  Confirm password" -AsSecureString
+                $plain1 = [System.Net.NetworkCredential]::new('', $securePwd1).Password
+                $plain2 = [System.Net.NetworkCredential]::new('', $securePwd2).Password
+
+                if ([string]::IsNullOrWhiteSpace($plain1)) {
+                    Write-Host "  Empty password - account is enabled but password was NOT changed." -ForegroundColor Red
+                } elseif ($plain1 -ne $plain2) {
+                    Write-Host "  Passwords didn't match - account is enabled but password was NOT changed." -ForegroundColor Red
+                } else {
+                    try {
+                        # ADSI SetPassword, not 'net user <pwd>' - avoids the password ever
+                        # appearing as a plaintext argument in a process command line.
+                        $adminAcct = [ADSI]"WinNT://$env:COMPUTERNAME/Administrator,user"
+                        $adminAcct.SetPassword($plain1)
+                        $adminAcct.SetInfo()
+                        Write-Host "  Password set." -ForegroundColor Green
+                    } catch {
+                        Write-Host "  Failed to set password: $($_.Exception.Message)" -ForegroundColor Red
+                    }
+                }
+                $plain1 = $null; $plain2 = $null
+            }
+        } catch {
+            Write-Host "  Failed to enable: $($_.Exception.Message)" -ForegroundColor DarkYellow
         }
-    } catch {
-        Write-Host "  Failed to enable: $($_.Exception.Message)" -ForegroundColor DarkYellow
     }
 }
 if ($DisableVBS) {
