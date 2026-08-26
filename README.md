@@ -53,6 +53,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Join-Path $env:TEMP
 | **Regional** | 12-hour time, `dd-MM-yyyy` dates, A4 paper (locale + physical printers) |
 | **Apps** | Installs Chrome, Microsoft 365, WinRAR via winget — skips anything already present |
 | **Delivery Optimization** | Windows Update peer-to-peer: local-network sharing allowed, internet sharing off |
+| **Administrator account (OFF by default)** | Enables the built-in Administrator account for remote troubleshooting - see below, **never sets a password** |
 | **Ad blocker** | Deploys uBlock Origin per browser (see below) |
 | **Resolution** | Optional per-game auto-switching (see below) |
 
@@ -81,6 +82,22 @@ Extensions deploy via `ExtensionInstallForcelist`, so browsers will show **"Mana
 Scans your Steam, GOG, and Epic libraries, adds what it finds to `game-resolutions.json` at native resolution, and registers a background task that switches resolution when a game launches and reverts when it closes. Useful on a 4K display where you'd rather play at 1440p.
 
 Edit `game-resolutions.json` to set per-game resolutions. If no games are configured, the watcher isn't scheduled.
+
+---
+
+## Built-in Administrator account, for remote troubleshooting (OFF by default)
+
+Set `$EnableAdminForLaps = $true` to enable the built-in Administrator account for emergency/remote local access. **This script never sets a password on it, anywhere, under any option.** A hardcoded password - however complex - committed to a public repo is readable by anyone and identical on every device that ran the script; strength doesn't fix that, uniqueness does.
+
+The account is left enabled but genuinely uncontrolled until you pair it with **Windows LAPS**:
+
+1. Intune admin center → **Endpoint security → Account protection → Create policy → Windows 10 and later → Windows LAPS**
+2. Leave "Administrator account name" blank (targets the built-in account automatically) and turn on password rotation
+3. Assign it to your devices
+
+Once that policy applies, Intune generates a unique, strong, auto-rotating password per device, viewable only by admins you authorize in the portal - never in this script, never in this repo. On Windows 11 24H2+, LAPS's "Automatic account management" can enable the account itself, making this script's toggle unnecessary; it's here for earlier builds where the account needs to already exist before the policy takes effect.
+
+Until the LAPS policy is actually applied to a device, don't rely on this account for access - Windows may already have some password hash on it from install time that this script does not know or control.
 
 ---
 

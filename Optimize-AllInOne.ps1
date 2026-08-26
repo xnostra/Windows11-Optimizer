@@ -98,6 +98,9 @@ $AutoDetectDefenderExclusions = $true
 $ExtraDefenderExclusionPaths  = @()
 $SetWindowsUpdateRestartNotify = $true
 $SetDeliveryOptimizationLanOnly = $true  # Windows Update P2P: local-network peering on, internet peering off
+$EnableAdminForLaps = $false  # OFF by default: enables built-in Administrator, NO password set here -
+                               # pair with a Windows LAPS policy in Intune to actually manage/rotate the
+                               # password. Never set a static password here or anywhere - see README.
 $SetRegionalPreferences = $true   # 12-hour time, dd-MM-yyyy
 $SetPrintersToA4        = $true
 $InstallApps            = $true
@@ -448,6 +451,23 @@ if ($SetDeliveryOptimizationLanOnly) {
     Write-Host "  Windows Update delivery: local-network sharing only, internet sharing off."
     Write-Host "  (Settings > Windows Update > Delivery Optimization will show this as" -ForegroundColor DarkYellow
     Write-Host "  managed, since it's set by policy rather than the UI toggle.)" -ForegroundColor DarkYellow
+}
+if ($EnableAdminForLaps) {
+    Write-Section "Built-in Administrator account (for Windows LAPS - no password set here)"
+    try {
+        net user Administrator /active:yes 2>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  Enabled. NO password was set by this script." -ForegroundColor Green
+            Write-Host "  This account is now usable but UNMANAGED until a Windows LAPS policy" -ForegroundColor Yellow
+            Write-Host "  targets it - configure one in Intune now: Endpoint security > Account" -ForegroundColor Yellow
+            Write-Host "  protection > Windows LAPS. Until that policy applies, don't rely on this" -ForegroundColor Yellow
+            Write-Host "  account for access - it has no controlled credential yet." -ForegroundColor Yellow
+        } else {
+            Write-Host "  'net user' exited with code $LASTEXITCODE - account may not be enabled." -ForegroundColor DarkYellow
+        }
+    } catch {
+        Write-Host "  Failed to enable: $($_.Exception.Message)" -ForegroundColor DarkYellow
+    }
 }
 if ($DisableVBS) {
     Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' 'Enabled' 0
