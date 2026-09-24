@@ -116,6 +116,7 @@ Configuration toggles are at the top of the script — set any to `$false` to sk
 - `$DisableNotificationsToasts` — turns off *all* Windows notifications
 - `$UseHighPerformanceOnAC` — **`$true` by default**: uses High performance on desktop/AC systems; battery devices remain Balanced
 - `$AggressiveAcPerformance` — **`$true` by default**: sets the AC CPU floor to 100%, enables aggressive boost, and disables Windows power throttling; increases heat and power use
+- `$ExtremeAcPerformance` — **`$true` by default**: disables AC USB/disk idle timers and prefers active cooling; increases heat, fan noise, and power use
 - `$DisableUAC` — **`$true` by default**: disables UAC prompts and requires a restart; set it to `$false` to keep UAC enabled
 - `$AppsToInstall` — edit or empty this list to change what gets installed
 

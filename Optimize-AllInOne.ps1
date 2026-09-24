@@ -79,6 +79,7 @@ $TuneServices                  = $true
 $SetBalancedPowerPlan          = $true
 $UseHighPerformanceOnAC        = $true    # Desktop/AC only; battery devices stay on Balanced
 $AggressiveAcPerformance       = $true    # AC only: max CPU floor, aggressive boost, and no background power throttling
+$ExtremeAcPerformance          = $true    # AC only: remove USB/disk idle timers and prefer active cooling
 $DisablePcieLSPM               = $true    # auto-disabled on battery devices below
 $GamingTweaks                  = $true
 $DisableNotificationsToasts    = $true
@@ -419,6 +420,12 @@ if ($SetBalancedPowerPlan) {
         powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
         Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' 'PowerThrottlingOff' 1
         Write-Host "  Aggressive AC profile: CPU floor 100%, boost mode aggressive, power throttling off." -ForegroundColor Yellow
+    }
+    if ($ExtremeAcPerformance -and -not $isBatteryDevice) {
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_USB USBSELECTIVE 0
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_DISK DISKIDLE 0
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSTEMCOOLINGPOLICY 0
+        Write-Host "  Extreme AC profile: USB/disk idle timers off, active cooling preferred." -ForegroundColor Red
     }
     if ($isBatteryDevice) {
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5
