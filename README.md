@@ -52,7 +52,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Join-Path $env:TEMP
 | **Security** | Adds your game libraries to Defender exclusions (never the whole drive) |
 | **UAC** | Disables User Account Control by default; set `$DisableUAC = $false` to keep UAC enabled |
 | **Regional** | 12-hour time, `dd-MM-yyyy` dates, A4 paper (locale + physical printers) |
-| **Apps** | Installs Chrome, Microsoft 365, WinRAR via winget — skips anything already present |
+| **Apps** | Installs Chrome and WinRAR via winget; installs Microsoft 365 through Microsoft's official Office Deployment Tool |
 | **Delivery Optimization** | Windows Update peer-to-peer: local-network sharing allowed, internet sharing off |
 | **Administrator account** | Enables the built-in Administrator account with the configured password |
 | **Ad blocker** | Deploys uBlock Origin per browser (see below) |

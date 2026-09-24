@@ -209,6 +209,37 @@ function Set-UACState {
     }
 }
 
+function Install-Microsoft365WithOdt {
+    $odtRoot = Join-Path $ScriptDir 'Microsoft365-ODT'
+    $odtExe = Join-Path $odtRoot 'odt.exe'
+    $setupExe = Join-Path $odtRoot 'setup.exe'
+    $configXml = Join-Path $odtRoot 'configuration.xml'
+    $odtUrl = 'https://download.microsoft.com/download/6c1eeb25-cf8b-41d9-8d0d-cc1dbc032140/officedeploymenttool_20326-20112.exe'
+
+    New-Item -ItemType Directory -Path $odtRoot -Force | Out-Null
+    if (-not (Test-Path $setupExe)) {
+        Write-Host '  Downloading the official Microsoft Office Deployment Tool...' -ForegroundColor Yellow
+        Invoke-WebRequest -Uri $odtUrl -OutFile $odtExe -UseBasicParsing -ErrorAction Stop
+        Start-Process -FilePath $odtExe -ArgumentList "/quiet /extract:$odtRoot" -Wait -NoNewWindow -ErrorAction Stop
+    }
+    if (-not (Test-Path $setupExe)) { throw 'Microsoft Office Deployment Tool did not extract setup.exe.' }
+
+    @'
+<Configuration>
+  <Add OfficeClientEdition="64" Channel="Current">
+    <Product ID="O365ProPlusRetail">
+      <Language ID="en-us" />
+    </Product>
+  </Add>
+  <Display Level="Full" AcceptEULA="TRUE" />
+</Configuration>
+'@ | Set-Content -Path $configXml -Encoding UTF8
+
+    Write-Host '  Starting Microsoft 365 setup. Follow any Office conflict or sign-in prompts.' -ForegroundColor Yellow
+    $p = Start-Process -FilePath $setupExe -ArgumentList "/configure `"$configXml`"" -Wait -PassThru -ErrorAction Stop
+    if ($p.ExitCode -ne 0) { throw "Office Deployment Tool failed with exit code $($p.ExitCode)." }
+}
+
 $mfrLower = "$manufacturer $model".ToLower()
 $companionApp = $null
 if ($mfrLower -match 'lenovo') {
@@ -571,6 +602,15 @@ if ($InstallApps) {
                 Write-Host "  $($app.Name) : already installed - skipped" -ForegroundColor DarkGray
             } else {
                 Write-Host "  $($app.Name) : installing..." -ForegroundColor Yellow
+                if ($app.Office) {
+                    try {
+                        Install-Microsoft365WithOdt
+                        Write-Host '  Microsoft 365 : installation completed.' -ForegroundColor Green
+                    } catch {
+                        Write-Host "  Microsoft 365 : install failed - $($_.Exception.Message)" -ForegroundColor Red
+                    }
+                    continue
+                }
                 $installArgs = @('--id', $app.Id, '--exact', '--source', 'winget', '--accept-package-agreements', '--accept-source-agreements')
                 if (-not $app.Office) { $installArgs += '--silent' }
                 $installOutput = winget install @installArgs 2>&1 | Out-String
