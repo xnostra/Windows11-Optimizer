@@ -53,7 +53,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Join-Path $env:TEMP
 | **Regional** | 12-hour time, `dd-MM-yyyy` dates, A4 paper (locale + physical printers) |
 | **Apps** | Installs Chrome, Microsoft 365, WinRAR via winget — skips anything already present |
 | **Delivery Optimization** | Windows Update peer-to-peer: local-network sharing allowed, internet sharing off |
-| **Administrator account (OFF by default)** | Enables the built-in Administrator account, then interactively prompts YOU for its password - nothing hardcoded |
+| **Administrator account** | Enables the built-in Administrator account with the configured password |
 | **Ad blocker** | Deploys uBlock Origin per browser (see below) |
 | **Resolution** | Optional per-game auto-switching (see below) |
 

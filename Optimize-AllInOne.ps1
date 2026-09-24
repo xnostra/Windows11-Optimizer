@@ -95,7 +95,7 @@ $SetupResolutionWatcher        = $true   # writes watcher files + scheduled task
 
 $AppsToInstall = @(
     @{ Id = 'Google.Chrome';    Name = 'Google Chrome' },
-    @{ Id = 'Microsoft.Office'; Name = 'Microsoft 365' },
+    @{ Id = 'Microsoft.Office'; Name = 'Microsoft 365'; Office = $true },
     @{ Id = 'RARLab.WinRAR';    Name = 'WinRAR' }
 )
 
@@ -176,6 +176,21 @@ function Test-AppInstalled {
     $installed = Get-ItemProperty -Path $keys -ErrorAction SilentlyContinue |
         Select-Object -ExpandProperty DisplayName -ErrorAction SilentlyContinue
     foreach ($p in $NamePatterns) { if ($installed -match [regex]::Escape($p)) { return $true } }
+    return $false
+}
+
+function Test-OfficeClickToRunInstalled {
+    $paths = @(
+        'HKLM:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Office\ClickToRun\Configuration',
+        'HKCU:\SOFTWARE\Microsoft\Office\ClickToRun\Configuration'
+    )
+    foreach ($path in $paths) {
+        if (Test-Path $path) {
+            $cfg = Get-ItemProperty -Path $path -ErrorAction SilentlyContinue
+            if ($cfg -and ($cfg.ProductReleaseIds -or $cfg.VersionToReport)) { return $true }
+        }
+    }
     return $false
 }
 
@@ -527,12 +542,25 @@ if ($InstallApps) {
         Write-Host "  winget not found - install 'App Installer' from the Microsoft Store." -ForegroundColor DarkYellow
     } else {
         foreach ($app in $AppsToInstall) {
-            $out = winget list --id $app.Id --exact --accept-source-agreements 2>&1 | Out-String
-            if ($out -match [regex]::Escape($app.Id)) {
+            $alreadyInstalled = if ($app.Office) {
+                (Test-OfficeClickToRunInstalled) -or (Test-AppInstalled -NamePatterns @('Microsoft 365','Microsoft Office','Office 365'))
+            } else {
+                $out = winget list --id $app.Id --exact --accept-source-agreements 2>&1 | Out-String
+                $out -match [regex]::Escape($app.Id)
+            }
+            if ($alreadyInstalled) {
                 Write-Host "  $($app.Name) : already installed - skipped" -ForegroundColor DarkGray
             } else {
                 Write-Host "  $($app.Name) : installing..." -ForegroundColor Yellow
-                winget install --id $app.Id --exact --silent --accept-package-agreements --accept-source-agreements
+                $installOutput = winget install --id $app.Id --exact --source winget --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "  $($app.Name) : install failed (winget exit code $LASTEXITCODE)" -ForegroundColor Red
+                    if ($app.Office) {
+                        Write-Host "  Microsoft 365 may be blocked by an older Office install, pending reboot, or another Click-to-Run process." -ForegroundColor DarkYellow
+                        Write-Host "  Run 'winget install -e --id Microsoft.Office --source winget' manually for the full installer error." -ForegroundColor DarkYellow
+                    }
+                    Write-Host ($installOutput.Trim()) -ForegroundColor DarkGray
+                }
             }
         }
         Write-Host "  Note: Microsoft 365 needs sign-in to activate; WinRAR is trialware." -ForegroundColor Yellow
