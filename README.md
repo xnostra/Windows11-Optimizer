@@ -47,7 +47,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Join-Path $env:TEMP
 | **Search** | Disables Bing/web results in the Start menu search box |
 | **Background** | Bulk-disables background app permissions; disables startup entries not on a keep-list |
 | **Services** | `DiagTrack`, `dmwappushservice`, `PrintNotify`, `WSearch`, `SysMain` → Manual (never Disabled) |
-| **Power** | High performance plan with aggressive boost on desktops, laptops, and handhelds; maximum battery performance is configurable |
+| **Power** | High performance plan with aggressive boost; AC display off after 1 hour/never sleep, battery display off after 30 minutes/sleep after 1 hour |
 | **Gaming** | Game Mode on, Game Bar/DVR off, HAGS on, windowed-game optimizations on |
 | **Security** | Adds your game libraries to Defender exclusions (never the whole drive) |
 | **UAC** | Disables User Account Control by default; set `$DisableUAC = $false` to keep UAC enabled |

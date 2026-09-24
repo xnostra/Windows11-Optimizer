@@ -427,6 +427,9 @@ if ($SetBalancedPowerPlan) {
     powercfg /setactive $powerScheme
     powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5
     powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+    # Display/sleep timers: AC display off after 1 hour, never sleep.
+    powercfg /setacvalueindex SCHEME_CURRENT SUB_VIDEO VIDEOIDLE 3600
+    powercfg /setacvalueindex SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 0
     if ($AggressiveAcPerformance -and -not $isBatteryDevice) {
         powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
         powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
@@ -448,6 +451,9 @@ if ($SetBalancedPowerPlan) {
         $batteryMin = if ($MaxPerformanceOnBattery) { 100 } else { 5 }
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN $batteryMin
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+        # Battery timers: display off after 30 minutes, sleep after 1 hour.
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_VIDEO VIDEOIDLE 1800
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 3600
         if ($MaxPerformanceOnBattery) {
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
             if ($DisableCoreParkingOnPerformancePlans) { Set-PowerCfgIndex @('/setdcvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','CPMINCORES','100') 'DC core parking' }
