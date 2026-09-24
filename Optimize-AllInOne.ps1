@@ -130,7 +130,7 @@ function Set-PowerCfgIndex {
     param([string[]]$Arguments, [string]$Label)
     & powercfg @Arguments 2>$null | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "  $Label: not supported by this hardware/firmware - skipped" -ForegroundColor DarkYellow
+        Write-Host "  ${Label}: not supported by this hardware/firmware - skipped" -ForegroundColor DarkYellow
         return $false
     }
     return $true
