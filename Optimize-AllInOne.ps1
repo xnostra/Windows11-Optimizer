@@ -78,6 +78,7 @@ $TuneStartupApps               = $true
 $TuneServices                  = $true
 $SetBalancedPowerPlan          = $true
 $UseHighPerformanceOnAC        = $true    # Desktop/AC only; battery devices stay on Balanced
+$AggressiveAcPerformance       = $true    # AC only: max CPU floor, aggressive boost, and no background power throttling
 $DisablePcieLSPM               = $true    # auto-disabled on battery devices below
 $GamingTweaks                  = $true
 $DisableNotificationsToasts    = $true
@@ -413,6 +414,12 @@ if ($SetBalancedPowerPlan) {
     powercfg /setactive $powerScheme
     powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5
     powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
+    if ($AggressiveAcPerformance -and -not $isBatteryDevice) {
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
+        Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' 'PowerThrottlingOff' 1
+        Write-Host "  Aggressive AC profile: CPU floor 100%, boost mode aggressive, power throttling off." -ForegroundColor Yellow
+    }
     if ($isBatteryDevice) {
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
