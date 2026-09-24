@@ -77,6 +77,7 @@ $DisableBackgroundApps         = $true
 $TuneStartupApps               = $true
 $TuneServices                  = $true
 $SetBalancedPowerPlan          = $true
+$UseHighPerformanceOnAC        = $true    # Desktop/AC only; battery devices stay on Balanced
 $DisablePcieLSPM               = $true    # auto-disabled on battery devices below
 $GamingTweaks                  = $true
 $DisableNotificationsToasts    = $true
@@ -406,8 +407,10 @@ if ($TuneServices) {
 # 7 - POWER
 # ============================================================
 if ($SetBalancedPowerPlan) {
-    Write-Section "Power plan: Balanced"
-    powercfg /setactive SCHEME_BALANCED
+    $powerScheme = if ($UseHighPerformanceOnAC -and -not $isBatteryDevice) { 'SCHEME_MIN' } else { 'SCHEME_BALANCED' }
+    $powerName = if ($powerScheme -eq 'SCHEME_MIN') { 'High performance' } else { 'Balanced' }
+    Write-Section "Power plan: $powerName"
+    powercfg /setactive $powerScheme
     powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5
     powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
     if ($isBatteryDevice) {
