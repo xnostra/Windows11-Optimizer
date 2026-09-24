@@ -80,6 +80,7 @@ $SetBalancedPowerPlan          = $true
 $UseHighPerformanceOnAC        = $true    # Desktop/AC only; battery devices stay on Balanced
 $AggressiveAcPerformance       = $true    # AC only: max CPU floor, aggressive boost, and no background power throttling
 $ExtremeAcPerformance          = $true    # AC only: remove disk idle timers and prefer active cooling
+$MaxPerformanceOnBattery       = $true    # Laptop/handheld battery mode: maximum performance at the cost of runtime/heat
 $DisablePcieLSPM               = $true    # auto-disabled on battery devices below
 $GamingTweaks                  = $true
 $DisableNotificationsToasts    = $true
@@ -270,7 +271,7 @@ $isBatteryDevice = $false
 if ($deviceCategory -match 'Laptop|Handheld|Tablet|Convertible') { $isBatteryDevice = $true }
 elseif (Get-CimInstance Win32_Battery -ErrorAction SilentlyContinue) { $isBatteryDevice = $true }
 
-if ($isBatteryDevice -and $DisablePcieLSPM) {
+if ($isBatteryDevice -and $DisablePcieLSPM -and -not $MaxPerformanceOnBattery) {
     $DisablePcieLSPM = $false
     Write-Host "`n  Battery device: leaving PCIe Link State Power Mgmt ENABLED (disabling it" -ForegroundColor Yellow
     Write-Host "  gains a little FPS but measurably increases power draw)." -ForegroundColor Yellow
@@ -409,7 +410,7 @@ if ($TuneServices) {
 # 7 - POWER
 # ============================================================
 if ($SetBalancedPowerPlan) {
-    $powerScheme = if ($UseHighPerformanceOnAC -and -not $isBatteryDevice) { 'SCHEME_MIN' } else { 'SCHEME_BALANCED' }
+    $powerScheme = if (($UseHighPerformanceOnAC -and -not $isBatteryDevice) -or ($MaxPerformanceOnBattery -and $isBatteryDevice)) { 'SCHEME_MIN' } else { 'SCHEME_BALANCED' }
     $powerName = if ($powerScheme -eq 'SCHEME_MIN') { 'High performance' } else { 'Balanced' }
     Write-Section "Power plan: $powerName"
     powercfg /setactive $powerScheme
@@ -427,9 +428,19 @@ if ($SetBalancedPowerPlan) {
         Write-Host "  Extreme AC profile: disk idle timer off, active cooling preferred." -ForegroundColor Red
     }
     if ($isBatteryDevice) {
-        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 5
+        $batteryMin = if ($MaxPerformanceOnBattery) { 100 } else { 5 }
+        powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN $batteryMin
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
-        Write-Host "  Applied to AC + DC (battery) profiles."
+        if ($MaxPerformanceOnBattery) {
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSTEMCOOLINGPOLICY 0
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_DISK DISKIDLE 0
+            Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' 'PowerThrottlingOff' 1
+            Write-Host "  Maximum battery profile: CPU floor 100%, aggressive boost, active cooling, PCIe/disk power saving off." -ForegroundColor Red
+        } else {
+            Write-Host "  Applied to AC + DC (battery) profiles."
+        }
     } else { Write-Host "  Applied to AC profile." }
     powercfg /setactive SCHEME_CURRENT
 }

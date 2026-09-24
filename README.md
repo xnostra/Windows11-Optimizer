@@ -47,7 +47,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Join-Path $env:TEMP
 | **Search** | Disables Bing/web results in the Start menu search box |
 | **Background** | Bulk-disables background app permissions; disables startup entries not on a keep-list |
 | **Services** | `DiagTrack`, `dmwappushservice`, `PrintNotify`, `WSearch`, `SysMain` → Manual (never Disabled) |
-| **Power** | High performance plan on desktops/AC, Balanced on battery, aggressive AC boost profile, PCIe ASPM off on desktops |
+| **Power** | High performance plan with aggressive boost on desktops, laptops, and handhelds; maximum battery performance is configurable |
 | **Gaming** | Game Mode on, Game Bar/DVR off, HAGS on, windowed-game optimizations on |
 | **Security** | Adds your game libraries to Defender exclusions (never the whole drive) |
 | **UAC** | Disables User Account Control by default; set `$DisableUAC = $false` to keep UAC enabled |
@@ -117,6 +117,7 @@ Configuration toggles are at the top of the script — set any to `$false` to sk
 - `$UseHighPerformanceOnAC` — **`$true` by default**: uses High performance on desktop/AC systems; battery devices remain Balanced
 - `$AggressiveAcPerformance` — **`$true` by default**: sets the AC CPU floor to 100%, enables aggressive boost, and disables Windows power throttling; increases heat and power use
 - `$ExtremeAcPerformance` — **`$true` by default**: disables the AC disk idle timer and prefers active cooling; increases heat, fan noise, and power use
+- `$MaxPerformanceOnBattery` — **`$true` by default**: applies the maximum-performance profile on laptop/handheld battery power too; dramatically reduces runtime and increases heat
 - `$DisableUAC` — **`$true` by default**: disables UAC prompts and requires a restart; set it to `$false` to keep UAC enabled
 - `$AppsToInstall` — edit or empty this list to change what gets installed
 
