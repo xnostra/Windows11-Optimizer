@@ -126,6 +126,16 @@ function Set-RegistryValue {
     }
 }
 
+function Set-PowerCfgIndex {
+    param([string[]]$Arguments, [string]$Label)
+    & powercfg @Arguments 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  $Label: not supported by this hardware/firmware - skipped" -ForegroundColor DarkYellow
+        return $false
+    }
+    return $true
+}
+
 # ============================================================
 # 1 - HARDWARE DETECTION
 # ============================================================
@@ -420,12 +430,12 @@ if ($SetBalancedPowerPlan) {
     if ($AggressiveAcPerformance -and -not $isBatteryDevice) {
         powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
         powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
-        if ($DisableCoreParkingOnPerformancePlans) { powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100 }
-        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFEPP 0
-        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFINCPOL 2
-        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFDECPOL 1
-        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFINCTHRESHOLD 10
-        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFDECTHRESHOLD 8
+        if ($DisableCoreParkingOnPerformancePlans) { Set-PowerCfgIndex @('/setacvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','CPMINCORES','100') 'AC core parking' }
+        Set-PowerCfgIndex @('/setacvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFEPP','0') 'AC energy preference'
+        Set-PowerCfgIndex @('/setacvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFINCPOL','2') 'AC increase policy'
+        Set-PowerCfgIndex @('/setacvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFDECPOL','1') 'AC decrease policy'
+        Set-PowerCfgIndex @('/setacvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFINCTHRESHOLD','10') 'AC increase threshold'
+        Set-PowerCfgIndex @('/setacvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFDECTHRESHOLD','8') 'AC decrease threshold'
         Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' 'PowerThrottlingOff' 1
         Write-Host "  Aggressive AC profile: CPU floor 100%, boost aggressive, cores unparked, responsiveness prioritized, power throttling off." -ForegroundColor Yellow
     }
@@ -440,12 +450,12 @@ if ($SetBalancedPowerPlan) {
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
         if ($MaxPerformanceOnBattery) {
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
-            if ($DisableCoreParkingOnPerformancePlans) { powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100 }
-            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFEPP 0
-            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFINCPOL 2
-            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFDECPOL 1
-            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFINCTHRESHOLD 10
-            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFDECTHRESHOLD 8
+            if ($DisableCoreParkingOnPerformancePlans) { Set-PowerCfgIndex @('/setdcvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','CPMINCORES','100') 'DC core parking' }
+            Set-PowerCfgIndex @('/setdcvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFEPP','0') 'DC energy preference'
+            Set-PowerCfgIndex @('/setdcvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFINCPOL','2') 'DC increase policy'
+            Set-PowerCfgIndex @('/setdcvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFDECPOL','1') 'DC decrease policy'
+            Set-PowerCfgIndex @('/setdcvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFINCTHRESHOLD','10') 'DC increase threshold'
+            Set-PowerCfgIndex @('/setdcvalueindex','SCHEME_CURRENT','SUB_PROCESSOR','PERFDECTHRESHOLD','8') 'DC decrease threshold'
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSTEMCOOLINGPOLICY 0
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_DISK DISKIDLE 0
