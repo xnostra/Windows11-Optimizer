@@ -81,6 +81,7 @@ $DisablePcieLSPM               = $true    # auto-disabled on battery devices bel
 $GamingTweaks                  = $true
 $DisableNotificationsToasts    = $true
 $DisableVBS                    = $true    # OFF: gains ~3-8% FPS in some games, reduces exploit protection. Set $false to keep Memory Integrity on.
+$DisableUAC                    = $true    # Disables UAC prompts. Reduces protection against unwanted elevated changes.
 $AutoDetectDefenderExclusions = $true
 $ExtraDefenderExclusionPaths  = @()
 $SetWindowsUpdateRestartNotify = $true
@@ -192,6 +193,20 @@ function Test-OfficeClickToRunInstalled {
         }
     }
     return $false
+}
+
+function Set-UACState {
+    param([bool]$Disabled)
+    $path = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System'
+    if ($Disabled) {
+        Set-RegistryValue $path 'EnableLUA' 0
+        Set-RegistryValue $path 'ConsentPromptBehaviorAdmin' 0
+        Write-Host '  UAC: disabled (restart required; lowers protection against unwanted elevated changes).' -ForegroundColor Red
+    } else {
+        Set-RegistryValue $path 'EnableLUA' 1
+        Set-RegistryValue $path 'ConsentPromptBehaviorAdmin' 5
+        Write-Host '  UAC: enabled.' -ForegroundColor Green
+    }
 }
 
 $mfrLower = "$manufacturer $model".ToLower()
@@ -476,6 +491,10 @@ if ($EnableAdminAccount) {
         Write-Host "  Failed to configure built-in Administrator account: $_" -ForegroundColor Red
     }
 }
+if ($DisableUAC) {
+    Write-Section "User Account Control"
+    Set-UACState -Disabled $true
+}
 if ($DisableVBS) {
     Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity' 'Enabled' 0
     Write-Host "  VBS / Memory Integrity: OFF (reboot required; reduces exploit protection)." -ForegroundColor Yellow
@@ -552,12 +571,14 @@ if ($InstallApps) {
                 Write-Host "  $($app.Name) : already installed - skipped" -ForegroundColor DarkGray
             } else {
                 Write-Host "  $($app.Name) : installing..." -ForegroundColor Yellow
-                $installOutput = winget install --id $app.Id --exact --source winget --silent --accept-package-agreements --accept-source-agreements 2>&1 | Out-String
+                $installArgs = @('--id', $app.Id, '--exact', '--source', 'winget', '--accept-package-agreements', '--accept-source-agreements')
+                if (-not $app.Office) { $installArgs += '--silent' }
+                $installOutput = winget install @installArgs 2>&1 | Out-String
                 if ($LASTEXITCODE -ne 0) {
                     Write-Host "  $($app.Name) : install failed (winget exit code $LASTEXITCODE)" -ForegroundColor Red
                     if ($app.Office) {
-                        Write-Host "  Microsoft 365 may be blocked by an older Office install, pending reboot, or another Click-to-Run process." -ForegroundColor DarkYellow
-                        Write-Host "  Run 'winget install -e --id Microsoft.Office --source winget' manually for the full installer error." -ForegroundColor DarkYellow
+                        Write-Host "  Microsoft 365 install did not complete. Close Word, Excel, Outlook, and Teams, then retry after restarting Windows if prompted." -ForegroundColor DarkYellow
+                        Write-Host "  The installer is interactive so it can show the exact Office conflict or sign-in message." -ForegroundColor DarkYellow
                     }
                     Write-Host ($installOutput.Trim()) -ForegroundColor DarkGray
                 }

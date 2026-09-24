@@ -12,7 +12,7 @@ This script ships with **VBS / Memory Integrity disabled** (`$DisableVBS = $true
 
 **If this is a work machine, a managed device, or anything you'd rather keep locked down, set `$DisableVBS = $false` before running.**
 
-It also turns off all Windows notifications and force-installs an ad blocker via browser policy. Skim the config block at the top of the script — every section has an on/off switch.
+It also turns off all Windows notifications, disables UAC by default, and force-installs an ad blocker via browser policy. Skim the config block at the top of the script — every section has an on/off switch.
 
 ---
 
@@ -50,6 +50,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$f = Join-Path $env:TEMP
 | **Power** | Balanced plan, min CPU 5% / max 100%, PCIe ASPM off on desktops |
 | **Gaming** | Game Mode on, Game Bar/DVR off, HAGS on, windowed-game optimizations on |
 | **Security** | Adds your game libraries to Defender exclusions (never the whole drive) |
+| **UAC** | Disables User Account Control by default; set `$DisableUAC = $false` to keep UAC enabled |
 | **Regional** | 12-hour time, `dd-MM-yyyy` dates, A4 paper (locale + physical printers) |
 | **Apps** | Installs Chrome, Microsoft 365, WinRAR via winget — skips anything already present |
 | **Delivery Optimization** | Windows Update peer-to-peer: local-network sharing allowed, internet sharing off |
@@ -113,6 +114,7 @@ Configuration toggles are at the top of the script — set any to `$false` to sk
 - `$RemoveXbox` — `$false` by default; set `$true` only if you don't use Game Pass
 - `$DisableVBS` — **`$true` by default**: turns OFF VBS / Memory Integrity. This gains roughly 3–8% FPS in some games but reduces exploit protection against malicious-driver attacks. Set it to `$false` to keep Memory Integrity enabled
 - `$DisableNotificationsToasts` — turns off *all* Windows notifications
+- `$DisableUAC` — **`$true` by default**: disables UAC prompts and requires a restart; set it to `$false` to keep UAC enabled
 - `$AppsToInstall` — edit or empty this list to change what gets installed
 
 ---
