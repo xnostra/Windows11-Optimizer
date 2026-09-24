@@ -81,6 +81,7 @@ $UseHighPerformanceOnAC        = $true    # Desktop/AC only; battery devices sta
 $AggressiveAcPerformance       = $true    # AC only: max CPU floor, aggressive boost, and no background power throttling
 $ExtremeAcPerformance          = $true    # AC only: remove disk idle timers and prefer active cooling
 $MaxPerformanceOnBattery       = $true    # Laptop/handheld battery mode: maximum performance at the cost of runtime/heat
+$DisableCoreParkingOnPerformancePlans = $true # Keeps all logical processors available on performance profiles
 $DisablePcieLSPM               = $true    # auto-disabled on battery devices below
 $GamingTweaks                  = $true
 $DisableNotificationsToasts    = $true
@@ -419,8 +420,14 @@ if ($SetBalancedPowerPlan) {
     if ($AggressiveAcPerformance -and -not $isBatteryDevice) {
         powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMIN 100
         powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
+        if ($DisableCoreParkingOnPerformancePlans) { powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100 }
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFEPP 0
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFINCPOL 2
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFDECPOL 1
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFINCTHRESHOLD 10
+        powercfg /setacvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFDECTHRESHOLD 8
         Set-RegistryValue 'HKLM:\SYSTEM\CurrentControlSet\Control\Power' 'PowerThrottlingOff' 1
-        Write-Host "  Aggressive AC profile: CPU floor 100%, boost mode aggressive, power throttling off." -ForegroundColor Yellow
+        Write-Host "  Aggressive AC profile: CPU floor 100%, boost aggressive, cores unparked, responsiveness prioritized, power throttling off." -ForegroundColor Yellow
     }
     if ($ExtremeAcPerformance -and -not $isBatteryDevice) {
         powercfg /setacvalueindex SCHEME_CURRENT SUB_DISK DISKIDLE 0
@@ -433,6 +440,12 @@ if ($SetBalancedPowerPlan) {
         powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 100
         if ($MaxPerformanceOnBattery) {
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFBOOSTMODE 2
+            if ($DisableCoreParkingOnPerformancePlans) { powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR CPMINCORES 100 }
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFEPP 0
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFINCPOL 2
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFDECPOL 1
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFINCTHRESHOLD 10
+            powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR PERFDECTHRESHOLD 8
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_PROCESSOR SYSTEMCOOLINGPOLICY 0
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_PCIEXPRESS ASPM 0
             powercfg /setdcvalueindex SCHEME_CURRENT SUB_DISK DISKIDLE 0
